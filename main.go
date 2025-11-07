@@ -163,7 +163,6 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 		}
 	}
 
-	// namespace (если есть) — просто проверяем тип
 	if _, ns := getMap(meta, "namespace"); ns != nil {
 		expectType(ns, yaml.ScalarNode, "metadata.namespace", errs)
 	}
@@ -240,10 +239,8 @@ var (
 func validateContainer(c *yaml.Node, errs *[]vErr) {
 	_, name := getMap(c, "name")
 	if name == nil {
-		// отсутствует поле name
 		*errs = append(*errs, vErr{msg: "name is required"})
 	} else if expectType(name, yaml.ScalarNode, "containers.name", errs) {
-		// поле есть, но пустое
 		if strings.TrimSpace(name.Value) == "" {
 			*errs = append(*errs, vErr{line: name.Line, msg: "name is required"})
 		} else if !snakeRe.MatchString(name.Value) {
@@ -331,12 +328,20 @@ func validateProbe(n *yaml.Node, errs *[]vErr, field string) {
 	_, port := getMap(httpGet, "port")
 	if port == nil {
 		*errs = append(*errs, vErr{msg: field + ".httpGet.port is required"})
-	} else if port.Kind != yaml.ScalarNode {
+		return
+	}
+	// строгое требование: порт — именно YAML int (не строка)
+	if port.Kind != yaml.ScalarNode || port.Tag != "!!int" {
 		*errs = append(*errs, vErr{line: port.Line, msg: "port must be int"})
-	} else if val, err := strconv.Atoi(port.Value); err != nil {
+		return
+	}
+	// диапазон порта
+	if val, err := strconv.Atoi(port.Value); err == nil {
+		if val < portMin || val > portMax {
+			*errs = append(*errs, vErr{line: port.Line, msg: "port value out of range"})
+		}
+	} else {
 		*errs = append(*errs, vErr{line: port.Line, msg: "port must be int"})
-	} else if val < portMin || val > portMax {
-		*errs = append(*errs, vErr{line: port.Line, msg: "port value out of range"})
 	}
 }
 
@@ -354,7 +359,6 @@ func validateResObj(n *yaml.Node, field string, errs *[]vErr) {
 		return
 	}
 	if _, cpu := getMap(n, "cpu"); cpu != nil {
-		// Требуем именно целочисленный YAML (!!int), чтобы "2" (строка) считалось ошибкой.
 		if cpu.Kind != yaml.ScalarNode || cpu.Tag != "!!int" {
 			*errs = append(*errs, vErr{line: cpu.Line, msg: "cpu must be int"})
 		}
