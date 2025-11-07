@@ -163,7 +163,7 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 		}
 	}
 
-	// namespace: просто проверяем тип, если присутствует
+	// namespace (если есть) — просто проверяем тип
 	if _, ns := getMap(meta, "namespace"); ns != nil {
 		expectType(ns, yaml.ScalarNode, "metadata.namespace", errs)
 	}
@@ -185,13 +185,13 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 func validatePodSpec(spec *yaml.Node, errs *[]vErr) {
 	if _, osNode := getMap(spec, "os"); osNode != nil {
 		if osNode.Kind == yaml.ScalarNode {
-			validateOSName(osNode, errs, "spec.os")
+			validateOSName(osNode, errs)
 		} else if osNode.Kind == yaml.MappingNode {
 			_, name := getMap(osNode, "name")
 			if name == nil {
 				*errs = append(*errs, vErr{msg: "spec.os.name is required"})
 			} else if expectType(name, yaml.ScalarNode, "spec.os.name", errs) {
-				validateOSName(name, errs, "spec.os")
+				validateOSName(name, errs)
 			}
 		} else {
 			*errs = append(*errs, vErr{line: osNode.Line, msg: "spec.os must be object"})
@@ -219,10 +219,13 @@ func validatePodSpec(spec *yaml.Node, errs *[]vErr) {
 	}
 }
 
-func validateOSName(n *yaml.Node, errs *[]vErr, field string) {
+func validateOSName(n *yaml.Node, errs *[]vErr) {
 	val := strings.ToLower(n.Value)
 	if val != "linux" && val != "windows" {
-		*errs = append(*errs, vErr{line: n.Line, msg: fmt.Sprintf("%s has unsupported value '%s'", field, n.Value)})
+		*errs = append(*errs, vErr{
+			line: n.Line,
+			msg:  fmt.Sprintf("os has unsupported value '%s'", n.Value),
+		})
 	}
 }
 
