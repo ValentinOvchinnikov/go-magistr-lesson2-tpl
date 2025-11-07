@@ -31,7 +31,9 @@ func main() {
 	file := flag.Arg(0)
 
 	b, err := os.ReadFile(file)
-	if err != nil { printFatalIOErr(file, err) }
+	if err != nil {
+		printFatalIOErr(file, err)
+	}
 
 	var root yaml.Node
 	if err := yaml.Unmarshal(b, &root); err != nil {
@@ -45,7 +47,10 @@ func main() {
 
 	var doc *yaml.Node
 	for _, c := range root.Content {
-		if c.Kind == yaml.DocumentNode { doc = c; break }
+		if c.Kind == yaml.DocumentNode {
+			doc = c
+			break
+		}
 	}
 	if doc == nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
 		fmt.Fprintf(os.Stderr, "%s: invalid YAML root (expected mapping)\n", file)
@@ -80,26 +85,43 @@ func printFatalIOErr(file string, err error) {
 }
 
 func getMap(m *yaml.Node, key string) (*yaml.Node, *yaml.Node) {
-	if m == nil || m.Kind != yaml.MappingNode { return nil, nil }
+	if m == nil || m.Kind != yaml.MappingNode {
+		return nil, nil
+	}
 	for i := 0; i < len(m.Content)-1; i += 2 {
-		k := m.Content[i]; v := m.Content[i+1]
-		if k.Value == key { return k, v }
+		k := m.Content[i]
+		v := m.Content[i+1]
+		if k.Value == key {
+			return k, v
+		}
 	}
 	return nil, nil
 }
 
 func expectType(node *yaml.Node, kind yaml.Kind, field string, errs *[]vErr) bool {
 	if node == nil || node.Kind != kind {
-		t := map[yaml.Kind]string{yaml.ScalarNode:"scalar", yaml.MappingNode:"object", yaml.SequenceNode:"array"}[kind]
-		if t == "" { t = "value" }
+		t := map[yaml.Kind]string{yaml.ScalarNode: "scalar", yaml.MappingNode: "object", yaml.SequenceNode: "array"}[kind]
+		if t == "" {
+			t = "value"
+		}
 		*errs = append(*errs, vErr{line: nodeLine(node), msg: fmt.Sprintf("%s must be %s", field, t)})
 		return false
 	}
 	return true
 }
 
-func nodeLine(n *yaml.Node) int { if n != nil && n.Line > 0 { return n.Line }; return 0 }
-func asString(n *yaml.Node) (string, bool) { if n!=nil && n.Kind==yaml.ScalarNode { return n.Value, true }; return "", false }
+func nodeLine(n *yaml.Node) int {
+	if n != nil && n.Line > 0 {
+		return n.Line
+	}
+	return 0
+}
+func asString(n *yaml.Node) (string, bool) {
+	if n != nil && n.Kind == yaml.ScalarNode {
+		return n.Value, true
+	}
+	return "", false
+}
 
 func validateTop(file string, top *yaml.Node, errs *[]vErr) {
 	_, apiNode := getMap(top, "apiVersion")
@@ -135,17 +157,23 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 	_, name := getMap(meta, "name")
 	if name == nil {
 		*errs = append(*errs, vErr{msg: "metadata.name is required"})
-	} else if !expectType(name, yaml.ScalarNode, "metadata.name", errs) {
-	} else if name.Value == "" {
-		*errs = append(*errs, vErr{line: name.Line, msg: "metadata.name has invalid format ''"})
+	} else if expectType(name, yaml.ScalarNode, "metadata.name", errs) {
+		if name.Value == "" {
+			*errs = append(*errs, vErr{line: name.Line, msg: "metadata.name has invalid format ''"})
+		}
 	}
 
-	if _, ns := getMap(meta, "namespace"); ns != nil && !expectType(ns, yaml.ScalarNode, "metadata.namespace", errs) {}
+	// namespace: просто проверяем тип, если присутствует
+	if _, ns := getMap(meta, "namespace"); ns != nil {
+		expectType(ns, yaml.ScalarNode, "metadata.namespace", errs)
+	}
+
 	if _, labels := getMap(meta, "labels"); labels != nil {
 		if expectType(labels, yaml.MappingNode, "metadata.labels", errs) {
 			for i := 0; i < len(labels.Content)-1; i += 2 {
-				k := labels.Content[i]; v := labels.Content[i+1]
-				if v.Kind != yaml.ScalarNode || k.Value=="" || v.Value=="" {
+				k := labels.Content[i]
+				v := labels.Content[i+1]
+				if v.Kind != yaml.ScalarNode || k.Value == "" || v.Value == "" {
 					*errs = append(*errs, vErr{line: v.Line, msg: "metadata.labels has invalid format ''"})
 					break
 				}
@@ -169,6 +197,7 @@ func validatePodSpec(spec *yaml.Node, errs *[]vErr) {
 			*errs = append(*errs, vErr{line: osNode.Line, msg: "spec.os must be object"})
 		}
 	}
+
 	_, conts := getMap(spec, "containers")
 	if conts == nil {
 		*errs = append(*errs, vErr{msg: "spec.containers is required"})
@@ -232,8 +261,12 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		}
 	}
 
-	if _, rp := getMap(c, "readinessProbe"); rp != nil { validateProbe(rp, errs, "containers.readinessProbe") }
-	if _, lp := getMap(c, "livenessProbe");  lp != nil { validateProbe(lp, errs, "containers.livenessProbe") }
+	if _, rp := getMap(c, "readinessProbe"); rp != nil {
+		validateProbe(rp, errs, "containers.readinessProbe")
+	}
+	if _, lp := getMap(c, "livenessProbe"); lp != nil {
+		validateProbe(lp, errs, "containers.livenessProbe")
+	}
 
 	_, res := getMap(c, "resources")
 	if res == nil {
@@ -256,7 +289,9 @@ func validateContainerPort(p *yaml.Node, errs *[]vErr) {
 	}
 
 	if _, proto := getMap(p, "protocol"); proto != nil {
-		if !expectType(proto, yaml.ScalarNode, "protocol", errs) { return }
+		if !expectType(proto, yaml.ScalarNode, "protocol", errs) {
+			return
+		}
 		up := strings.ToUpper(proto.Value)
 		if up != "TCP" && up != "UDP" {
 			*errs = append(*errs, vErr{line: proto.Line, msg: fmt.Sprintf("protocol has unsupported value '%s'", proto.Value)})
@@ -265,13 +300,17 @@ func validateContainerPort(p *yaml.Node, errs *[]vErr) {
 }
 
 func validateProbe(n *yaml.Node, errs *[]vErr, field string) {
-	if !expectType(n, yaml.MappingNode, field, errs) { return }
+	if !expectType(n, yaml.MappingNode, field, errs) {
+		return
+	}
 	_, httpGet := getMap(n, "httpGet")
 	if httpGet == nil {
 		*errs = append(*errs, vErr{msg: field + ".httpGet is required"})
 		return
 	}
-	if !expectType(httpGet, yaml.MappingNode, field+".httpGet", errs) { return }
+	if !expectType(httpGet, yaml.MappingNode, field+".httpGet", errs) {
+		return
+	}
 
 	_, path := getMap(httpGet, "path")
 	if path == nil {
@@ -293,12 +332,18 @@ func validateProbe(n *yaml.Node, errs *[]vErr, field string) {
 }
 
 func validateResources(n *yaml.Node, errs *[]vErr) {
-	if _, limits := getMap(n, "limits"); limits != nil { validateResObj(limits, "containers.resources.limits", errs) }
-	if _, req := getMap(n, "requests"); req != nil { validateResObj(req, "containers.resources.requests", errs) }
+	if _, limits := getMap(n, "limits"); limits != nil {
+		validateResObj(limits, "containers.resources.limits", errs)
+	}
+	if _, req := getMap(n, "requests"); req != nil {
+		validateResObj(req, "containers.resources.requests", errs)
+	}
 }
 
 func validateResObj(n *yaml.Node, field string, errs *[]vErr) {
-	if !expectType(n, yaml.MappingNode, field, errs) { return }
+	if !expectType(n, yaml.MappingNode, field, errs) {
+		return
+	}
 	if _, cpu := getMap(n, "cpu"); cpu != nil {
 		if cpu.Kind != yaml.ScalarNode || func() bool { _, err := strconv.Atoi(cpu.Value); return err != nil }() {
 			*errs = append(*errs, vErr{line: cpu.Line, msg: "cpu must be int"})
