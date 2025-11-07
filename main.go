@@ -29,6 +29,7 @@ func main() {
 		os.Exit(2)
 	}
 	file := flag.Arg(0)
+	base := filepath.Base(file)
 
 	b, err := os.ReadFile(file)
 	if err != nil {
@@ -37,11 +38,7 @@ func main() {
 
 	var root yaml.Node
 	if err := yaml.Unmarshal(b, &root); err != nil {
-		fmt.Printf("%s: %v\n", file, err)
-		os.Exit(1)
-	}
-	if len(root.Content) == 0 && root.Kind != yaml.MappingNode {
-		fmt.Printf("%s: empty yaml\n", file)
+		fmt.Printf("%s: %v\n", base, err)
 		os.Exit(1)
 	}
 
@@ -56,7 +53,7 @@ func main() {
 		top = &root
 	}
 	if top == nil || top.Kind != yaml.MappingNode {
-		fmt.Printf("%s: invalid YAML root (expected mapping)\n", file)
+		fmt.Printf("%s: invalid YAML root (expected mapping)\n", base)
 		os.Exit(1)
 	}
 
@@ -68,7 +65,7 @@ func main() {
 			if e.line == 0 {
 				fmt.Println(e.msg)
 			} else {
-				fmt.Printf("%s:%d %s\n", file, e.line, e.msg)
+				fmt.Printf("%s:%d %s\n", base, e.line, e.msg)
 			}
 		}
 		os.Exit(1)
@@ -77,11 +74,12 @@ func main() {
 }
 
 func printFatalIOErr(file string, err error) {
+	base := filepath.Base(file)
 	var pErr *fs.PathError
 	if errors.As(err, &pErr) {
-		fmt.Printf("%s: %v\n", file, pErr.Err)
+		fmt.Printf("%s: %v\n", base, pErr.Err)
 	} else {
-		fmt.Printf("%s: %v\n", file, err)
+		fmt.Printf("%s: %v\n", base, err)
 	}
 	os.Exit(1)
 }
@@ -164,7 +162,7 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 	if name == nil {
 		*errs = append(*errs, vErr{msg: "metadata.name is required"})
 	} else if expectType(name, yaml.ScalarNode, "metadata.name", errs) {
-		// тест ожидает именно "name is required" на пустую строку
+		// тест ожидает "name is required" для пустой строки
 		if strings.TrimSpace(name.Value) == "" {
 			*errs = append(*errs, vErr{line: name.Line, msg: "name is required"})
 		}
