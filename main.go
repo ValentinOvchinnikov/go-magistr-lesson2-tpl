@@ -40,23 +40,25 @@ func main() {
 		fmt.Printf("%s: %v\n", file, err)
 		os.Exit(1)
 	}
-	if len(root.Content) == 0 {
+	if len(root.Content) == 0 && root.Kind != yaml.MappingNode {
 		fmt.Printf("%s: empty yaml\n", file)
 		os.Exit(1)
 	}
 
-	var doc *yaml.Node
-	for _, c := range root.Content {
-		if c.Kind == yaml.DocumentNode {
-			doc = c
-			break
+	// Надёжно находим корневой mapping: либо документ с mapping внутри, либо сам mapping
+	var top *yaml.Node
+	switch root.Kind {
+	case yaml.DocumentNode:
+		if len(root.Content) > 0 && root.Content[0].Kind == yaml.MappingNode {
+			top = root.Content[0]
 		}
+	case yaml.MappingNode:
+		top = &root
 	}
-	if doc == nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+	if top == nil || top.Kind != yaml.MappingNode {
 		fmt.Printf("%s: invalid YAML root (expected mapping)\n", file)
 		os.Exit(1)
 	}
-	top := doc.Content[0]
 
 	var errs []vErr
 	validateTop(top, &errs)
@@ -124,6 +126,7 @@ func asString(n *yaml.Node) (string, bool) {
 }
 
 func validateTop(top *yaml.Node, errs *[]vErr) {
+	// apiVersion
 	_, apiNode := getMap(top, "apiVersion")
 	if apiNode == nil {
 		*errs = append(*errs, vErr{msg: "apiVersion is required"})
@@ -131,6 +134,7 @@ func validateTop(top *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: apiNode.Line, msg: fmt.Sprintf("apiVersion has unsupported value '%s'", apiNode.Value)})
 	}
 
+	// kind
 	_, kindNode := getMap(top, "kind")
 	if kindNode == nil {
 		*errs = append(*errs, vErr{msg: "kind is required"})
@@ -138,6 +142,7 @@ func validateTop(top *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: kindNode.Line, msg: fmt.Sprintf("kind has unsupported value '%s'", kindNode.Value)})
 	}
 
+	// metadata
 	_, meta := getMap(top, "metadata")
 	if meta == nil {
 		*errs = append(*errs, vErr{msg: "metadata is required"})
@@ -145,6 +150,7 @@ func validateTop(top *yaml.Node, errs *[]vErr) {
 		validateObjectMeta(meta, errs)
 	}
 
+	// spec
 	_, spec := getMap(top, "spec")
 	if spec == nil {
 		*errs = append(*errs, vErr{msg: "spec is required"})
@@ -158,8 +164,9 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 	if name == nil {
 		*errs = append(*errs, vErr{msg: "metadata.name is required"})
 	} else if expectType(name, yaml.ScalarNode, "metadata.name", errs) {
-		if name.Value == "" {
-			*errs = append(*errs, vErr{line: name.Line, msg: "metadata.name has invalid format ''"})
+		// тест ожидает именно "name is required" на пустую строку
+		if strings.TrimSpace(name.Value) == "" {
+			*errs = append(*errs, vErr{line: name.Line, msg: "name is required"})
 		}
 	}
 
