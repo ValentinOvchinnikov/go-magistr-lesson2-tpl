@@ -59,7 +59,7 @@ func main() {
 	top := doc.Content[0]
 
 	var errs []vErr
-	validateTop(file, top, &errs)
+	validateTop(top, &errs)
 
 	if len(errs) > 0 {
 		for _, e := range errs {
@@ -123,7 +123,8 @@ func asString(n *yaml.Node) (string, bool) {
 	return "", false
 }
 
-func validateTop(file string, top *yaml.Node, errs *[]vErr) {
+func validateTop(top *yaml.Node, errs *[]vErr) {
+	// apiVersion
 	_, apiNode := getMap(top, "apiVersion")
 	if apiNode == nil {
 		*errs = append(*errs, vErr{msg: "apiVersion is required"})
@@ -131,6 +132,7 @@ func validateTop(file string, top *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: apiNode.Line, msg: fmt.Sprintf("apiVersion has unsupported value '%s'", apiNode.Value)})
 	}
 
+	// kind
 	_, kindNode := getMap(top, "kind")
 	if kindNode == nil {
 		*errs = append(*errs, vErr{msg: "kind is required"})
@@ -138,6 +140,7 @@ func validateTop(file string, top *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: kindNode.Line, msg: fmt.Sprintf("kind has unsupported value '%s'", kindNode.Value)})
 	}
 
+	// metadata
 	_, meta := getMap(top, "metadata")
 	if meta == nil {
 		*errs = append(*errs, vErr{msg: "metadata is required"})
@@ -145,6 +148,7 @@ func validateTop(file string, top *yaml.Node, errs *[]vErr) {
 		validateObjectMeta(meta, errs)
 	}
 
+	// spec
 	_, spec := getMap(top, "spec")
 	if spec == nil {
 		*errs = append(*errs, vErr{msg: "spec is required"})
@@ -182,21 +186,24 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 }
 
 func validatePodSpec(spec *yaml.Node, errs *[]vErr) {
+	// os (scalar or {name: ...})
 	if _, osNode := getMap(spec, "os"); osNode != nil {
-		if osNode.Kind == yaml.ScalarNode {
+		switch osNode.Kind {
+		case yaml.ScalarNode:
 			validateOSName(osNode, errs)
-		} else if osNode.Kind == yaml.MappingNode {
+		case yaml.MappingNode:
 			_, name := getMap(osNode, "name")
 			if name == nil {
 				*errs = append(*errs, vErr{msg: "spec.os.name is required"})
 			} else if expectType(name, yaml.ScalarNode, "spec.os.name", errs) {
 				validateOSName(name, errs)
 			}
-		} else {
+		default:
 			*errs = append(*errs, vErr{line: osNode.Line, msg: "spec.os must be object"})
 		}
 	}
 
+	// containers
 	_, conts := getMap(spec, "containers")
 	if conts == nil {
 		*errs = append(*errs, vErr{msg: "spec.containers is required"})
@@ -221,10 +228,7 @@ func validatePodSpec(spec *yaml.Node, errs *[]vErr) {
 func validateOSName(n *yaml.Node, errs *[]vErr) {
 	val := strings.ToLower(n.Value)
 	if val != "linux" && val != "windows" {
-		*errs = append(*errs, vErr{
-			line: n.Line,
-			msg:  fmt.Sprintf("os has unsupported value '%s'", n.Value),
-		})
+		*errs = append(*errs, vErr{line: n.Line, msg: fmt.Sprintf("os has unsupported value '%s'", n.Value)})
 	}
 }
 
@@ -237,10 +241,11 @@ var (
 )
 
 func validateContainer(c *yaml.Node, errs *[]vErr) {
+	// name
 	_, name := getMap(c, "name")
 	if name == nil {
 		*errs = append(*errs, vErr{msg: "name is required"})
-	} else if expectType(name, yaml.ScalarNode, "name", errs) { // <-- тут поменялось
+	} else if expectType(name, yaml.ScalarNode, "name", errs) {
 		if strings.TrimSpace(name.Value) == "" {
 			*errs = append(*errs, vErr{line: name.Line, msg: "name is required"})
 		} else if !snakeRe.MatchString(name.Value) {
@@ -248,6 +253,7 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		}
 	}
 
+	// image
 	_, image := getMap(c, "image")
 	if image == nil {
 		*errs = append(*errs, vErr{msg: "containers.image is required"})
@@ -255,6 +261,7 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: image.Line, msg: fmt.Sprintf("containers.image has invalid format '%s'", image.Value)})
 	}
 
+	// ports
 	if _, ports := getMap(c, "ports"); ports != nil {
 		if expectType(ports, yaml.SequenceNode, "containers.ports", errs) {
 			for _, p := range ports.Content {
@@ -267,6 +274,7 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		}
 	}
 
+	// probes
 	if _, rp := getMap(c, "readinessProbe"); rp != nil {
 		validateProbe(rp, errs, "containers.readinessProbe")
 	}
@@ -274,6 +282,7 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		validateProbe(lp, errs, "containers.livenessProbe")
 	}
 
+	// resources
 	_, res := getMap(c, "resources")
 	if res == nil {
 		*errs = append(*errs, vErr{msg: "containers.resources is required"})
@@ -330,10 +339,12 @@ func validateProbe(n *yaml.Node, errs *[]vErr, field string) {
 		*errs = append(*errs, vErr{msg: field + ".httpGet.port is required"})
 		return
 	}
+	// именно int
 	if port.Kind != yaml.ScalarNode || port.Tag != "!!int" {
 		*errs = append(*errs, vErr{line: port.Line, msg: "port must be int"})
 		return
 	}
+	// диапазон
 	if val, err := strconv.Atoi(port.Value); err == nil {
 		if val < portMin || val > portMax {
 			*errs = append(*errs, vErr{line: port.Line, msg: "port value out of range"})
