@@ -240,7 +240,7 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 	_, name := getMap(c, "name")
 	if name == nil {
 		*errs = append(*errs, vErr{msg: "name is required"})
-	} else if expectType(name, yaml.ScalarNode, "containers.name", errs) {
+	} else if expectType(name, yaml.ScalarNode, "name", errs) { // <-- тут поменялось
 		if strings.TrimSpace(name.Value) == "" {
 			*errs = append(*errs, vErr{line: name.Line, msg: "name is required"})
 		} else if !snakeRe.MatchString(name.Value) {
@@ -330,12 +330,10 @@ func validateProbe(n *yaml.Node, errs *[]vErr, field string) {
 		*errs = append(*errs, vErr{msg: field + ".httpGet.port is required"})
 		return
 	}
-	// строгое требование: порт — именно YAML int (не строка)
 	if port.Kind != yaml.ScalarNode || port.Tag != "!!int" {
 		*errs = append(*errs, vErr{line: port.Line, msg: "port must be int"})
 		return
 	}
-	// диапазон порта
 	if val, err := strconv.Atoi(port.Value); err == nil {
 		if val < portMin || val > portMax {
 			*errs = append(*errs, vErr{line: port.Line, msg: "port value out of range"})
