@@ -21,7 +21,7 @@ type vErr struct {
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s <path/to/file.yaml>\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(os.Stdout, "Usage: %s <path/to/file.yaml>\n", filepath.Base(os.Args[0]))
 	}
 	flag.Parse()
 	if flag.NArg() != 1 {
@@ -37,11 +37,11 @@ func main() {
 
 	var root yaml.Node
 	if err := yaml.Unmarshal(b, &root); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", file, err)
+		fmt.Printf("%s: %v\n", file, err)
 		os.Exit(1)
 	}
 	if len(root.Content) == 0 {
-		fmt.Fprintf(os.Stderr, "%s: empty yaml\n", file)
+		fmt.Printf("%s: empty yaml\n", file)
 		os.Exit(1)
 	}
 
@@ -53,7 +53,7 @@ func main() {
 		}
 	}
 	if doc == nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-		fmt.Fprintf(os.Stderr, "%s: invalid YAML root (expected mapping)\n", file)
+		fmt.Printf("%s: invalid YAML root (expected mapping)\n", file)
 		os.Exit(1)
 	}
 	top := doc.Content[0]
@@ -64,9 +64,9 @@ func main() {
 	if len(errs) > 0 {
 		for _, e := range errs {
 			if e.line == 0 {
-				fmt.Fprintln(os.Stderr, e.msg)
+				fmt.Println(e.msg)
 			} else {
-				fmt.Fprintf(os.Stderr, "%s:%d %s\n", file, e.line, e.msg)
+				fmt.Printf("%s:%d %s\n", file, e.line, e.msg)
 			}
 		}
 		os.Exit(1)
@@ -77,9 +77,9 @@ func main() {
 func printFatalIOErr(file string, err error) {
 	var pErr *fs.PathError
 	if errors.As(err, &pErr) {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", file, pErr.Err)
+		fmt.Printf("%s: %v\n", file, pErr.Err)
 	} else {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", file, err)
+		fmt.Printf("%s: %v\n", file, err)
 	}
 	os.Exit(1)
 }
@@ -124,7 +124,6 @@ func asString(n *yaml.Node) (string, bool) {
 }
 
 func validateTop(top *yaml.Node, errs *[]vErr) {
-	// apiVersion
 	_, apiNode := getMap(top, "apiVersion")
 	if apiNode == nil {
 		*errs = append(*errs, vErr{msg: "apiVersion is required"})
@@ -132,7 +131,6 @@ func validateTop(top *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: apiNode.Line, msg: fmt.Sprintf("apiVersion has unsupported value '%s'", apiNode.Value)})
 	}
 
-	// kind
 	_, kindNode := getMap(top, "kind")
 	if kindNode == nil {
 		*errs = append(*errs, vErr{msg: "kind is required"})
@@ -140,7 +138,6 @@ func validateTop(top *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: kindNode.Line, msg: fmt.Sprintf("kind has unsupported value '%s'", kindNode.Value)})
 	}
 
-	// metadata
 	_, meta := getMap(top, "metadata")
 	if meta == nil {
 		*errs = append(*errs, vErr{msg: "metadata is required"})
@@ -148,7 +145,6 @@ func validateTop(top *yaml.Node, errs *[]vErr) {
 		validateObjectMeta(meta, errs)
 	}
 
-	// spec
 	_, spec := getMap(top, "spec")
 	if spec == nil {
 		*errs = append(*errs, vErr{msg: "spec is required"})
@@ -186,7 +182,6 @@ func validateObjectMeta(meta *yaml.Node, errs *[]vErr) {
 }
 
 func validatePodSpec(spec *yaml.Node, errs *[]vErr) {
-	// os (scalar or {name: ...})
 	if _, osNode := getMap(spec, "os"); osNode != nil {
 		switch osNode.Kind {
 		case yaml.ScalarNode:
@@ -203,7 +198,6 @@ func validatePodSpec(spec *yaml.Node, errs *[]vErr) {
 		}
 	}
 
-	// containers
 	_, conts := getMap(spec, "containers")
 	if conts == nil {
 		*errs = append(*errs, vErr{msg: "spec.containers is required"})
@@ -241,7 +235,6 @@ var (
 )
 
 func validateContainer(c *yaml.Node, errs *[]vErr) {
-	// name
 	_, name := getMap(c, "name")
 	if name == nil {
 		*errs = append(*errs, vErr{msg: "name is required"})
@@ -253,7 +246,6 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		}
 	}
 
-	// image
 	_, image := getMap(c, "image")
 	if image == nil {
 		*errs = append(*errs, vErr{msg: "containers.image is required"})
@@ -261,7 +253,6 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		*errs = append(*errs, vErr{line: image.Line, msg: fmt.Sprintf("containers.image has invalid format '%s'", image.Value)})
 	}
 
-	// ports
 	if _, ports := getMap(c, "ports"); ports != nil {
 		if expectType(ports, yaml.SequenceNode, "containers.ports", errs) {
 			for _, p := range ports.Content {
@@ -274,7 +265,6 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		}
 	}
 
-	// probes
 	if _, rp := getMap(c, "readinessProbe"); rp != nil {
 		validateProbe(rp, errs, "containers.readinessProbe")
 	}
@@ -282,7 +272,6 @@ func validateContainer(c *yaml.Node, errs *[]vErr) {
 		validateProbe(lp, errs, "containers.livenessProbe")
 	}
 
-	// resources
 	_, res := getMap(c, "resources")
 	if res == nil {
 		*errs = append(*errs, vErr{msg: "containers.resources is required"})
@@ -339,12 +328,10 @@ func validateProbe(n *yaml.Node, errs *[]vErr, field string) {
 		*errs = append(*errs, vErr{msg: field + ".httpGet.port is required"})
 		return
 	}
-	// именно int
 	if port.Kind != yaml.ScalarNode || port.Tag != "!!int" {
 		*errs = append(*errs, vErr{line: port.Line, msg: "port must be int"})
 		return
 	}
-	// диапазон
 	if val, err := strconv.Atoi(port.Value); err == nil {
 		if val < portMin || val > portMax {
 			*errs = append(*errs, vErr{line: port.Line, msg: "port value out of range"})
