@@ -240,9 +240,15 @@ var (
 func validateContainer(c *yaml.Node, errs *[]vErr) {
 	_, name := getMap(c, "name")
 	if name == nil {
-		*errs = append(*errs, vErr{msg: "containers.name is required"})
-	} else if expectType(name, yaml.ScalarNode, "containers.name", errs) && !snakeRe.MatchString(name.Value) {
-		*errs = append(*errs, vErr{line: name.Line, msg: fmt.Sprintf("containers.name has invalid format '%s'", name.Value)})
+		// отсутствует поле name
+		*errs = append(*errs, vErr{msg: "name is required"})
+	} else if expectType(name, yaml.ScalarNode, "containers.name", errs) {
+		// поле есть, но пустое
+		if strings.TrimSpace(name.Value) == "" {
+			*errs = append(*errs, vErr{line: name.Line, msg: "name is required"})
+		} else if !snakeRe.MatchString(name.Value) {
+			*errs = append(*errs, vErr{line: name.Line, msg: fmt.Sprintf("containers.name has invalid format '%s'", name.Value)})
+		}
 	}
 
 	_, image := getMap(c, "image")
@@ -348,7 +354,8 @@ func validateResObj(n *yaml.Node, field string, errs *[]vErr) {
 		return
 	}
 	if _, cpu := getMap(n, "cpu"); cpu != nil {
-		if cpu.Kind != yaml.ScalarNode || func() bool { _, err := strconv.Atoi(cpu.Value); return err != nil }() {
+		// Требуем именно целочисленный YAML (!!int), чтобы "2" (строка) считалось ошибкой.
+		if cpu.Kind != yaml.ScalarNode || cpu.Tag != "!!int" {
 			*errs = append(*errs, vErr{line: cpu.Line, msg: "cpu must be int"})
 		}
 	}
